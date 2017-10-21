@@ -47,17 +47,16 @@ module.exports = (env) =>
             @devices[uniqueId] = {
               device: device,
               name: deviceName,
-              uniqueId: "00:17:88:5E:D3:" + uniqueId + "-" + uniqueId,
+              uniqueId: @macAddress + ":" + uniqueId + "-" + uniqueId,
               changeState: (state) =>
-                # env.logger.debug("changing state for #{deviceName}: #{JSON.stringify(state)}")
-                state = JSON.parse(Object.keys(state)[0])
+                try state = JSON.parse(Object.keys(state)[0])
 
                 response = []
                 if state.bri?
                   response.push({ "success": { "/lights/#{uniqueId}/state/bri" : state.bri}})
                   env.logger.debug("setting brightness of #{deviceName} to #{state.bri}")
                   @_setBrightness(device, state.bri)
-                else if state.on?
+                if state.on?
                   response.push({ "success": { "/lights/#{uniqueId}/state/on" : state.on }})
                   env.logger.debug("setting state of #{deviceName} to #{state.on}")
                   @_changeStateTo(device, state.on, buttonId)
@@ -167,14 +166,14 @@ module.exports = (env) =>
 
         if msg.indexOf('M-SEARCH * HTTP/1.1') == 0 && msg.indexOf('ssdp:discover') > 0 &&
           msg.indexOf('urn:schemas-upnp-org:device:basic:1') > 0
-            env.logger.debug "<< server got: #{msg} from #{rinfo.address}:#{rinfo.port}"
+            #env.logger.debug "<< server got: #{msg} from #{rinfo.address}:#{rinfo.port}"
             async.eachSeries(@_getDiscoveryResponses(), (response, cb) =>
               udpServer.send(response, 0, response.length, rinfo.port, rinfo.address, () =>
-                env.logger.debug ">> sent response ssdp discovery response: #{response}"
+                #env.logger.debug ">> sent response ssdp discovery response: #{response}"
                 cb()
               )
             , (err) =>
-              env.logger.debug "complete sending all responses."
+              #env.logger.debug "complete sending all responses."
               if err
                 env.logger.debug "Received error: #{JSON.stringify(err)}"
             )
@@ -206,6 +205,32 @@ module.exports = (env) =>
         res.status(200).send('')
       )
 
+# Debug info for all incoming requests
+      emulator.all('*', (req, res, next) =>
+        env.logger.debug "######################### HUE REQUEST #########################"
+        env.logger.debug "Method: " + req.method
+        env.logger.debug "URL:    " + req.originalUrl
+        env.logger.debug "Body:   " + JSON.stringify(req.body)
+        env.logger.debug "####################### END HUE REQUEST #######################"
+        next()
+      )
+
+# New User request
+      emulator.post('/api', (req, res) =>
+        user = ""
+        user += Math.random().toString(36).substr(2) while user.length < 32
+        user = user.substr(0,32)
+        response = [
+          success:{
+            username: user
+          }
+        ]
+        
+        res.setHeader('Content-Type', 'application/json')
+        res.status(200).json(response)
+      )
+
+# Get Lights
       emulator.get('/api/:userid/lights', (req, res) =>
         response = {}
         _.forOwn(@devices, (device, id) =>
@@ -214,7 +239,38 @@ module.exports = (env) =>
 
         res.status(200).send(JSON.stringify(response))
       )
+# Get Groups
+      emulator.get('/api/:userid/groups', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
+# Get Config
+      emulator.get('/api/:userid/config', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
+# Get Schedules
+      emulator.get('/api/:userid/schedules', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
+# Get Scenes
+      emulator.get('/api/:userid/scenes', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
+# Get Sensors
+      emulator.get('/api/:userid/sensors', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
+# Get Rules
+      emulator.get('/api/:userid/rules', (req, res) =>
+        response = {}
+        res.status(200).send(JSON.stringify(response))
+      )
 
+# Get device status
       emulator.get('/api/:userid/lights/:id', (req, res) =>
         device = @devices[req.params["id"]]
         if device
@@ -223,6 +279,7 @@ module.exports = (env) =>
           res.status(404).send("Not found")
       )
 
+# Switch device state
       emulator.put('/api/:userid/lights/:id/state', (req, res) =>
         device = @devices[req.params["id"]]
         response = device.changeState(req.body)
